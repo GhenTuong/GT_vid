@@ -1,0 +1,106 @@
+--[[------------------------------------------------------------
+	Test
+--------------------------------------------------------------]]
+---[[
+function round_number(x)
+	local ab = math.abs(x * 10)
+	local t1 = math.floor(ab)
+	local t2 = math.ceil(ab)
+	local n = (ab - t1 <  t2 - ab) and t1 or t2
+	local s = tostring(n)
+	local k = (x > 0) and "" or "-"
+	return k .. string.sub(s,1,#s-1) .. "." .. string.sub(s,#s,#s)
+end
+
+cmd = debug_cmd_list.command_get_list()
+
+function cmd.ghenpos()
+	local pick = ray_pick()
+	pick:set_position(device().cam_pos)
+	pick:set_direction(device().cam_dir)
+	pick:set_ignore_object(db.actor)
+	pick:set_flags(2)
+	pick:set_range(20)
+	pick:query()
+	local distance = pick:get_distance()
+	
+	local pos = vector():set(0,0,0):mad(device().cam_pos,device().cam_dir,distance)
+	local vid = pos and level.vertex_id(vector():set(pos.x,pos.y+0.5,pos.z))
+	local pip = vid and level.vertex_position(vid)
+	local dir = math.floor(yaw_degree(device().cam_dir,vector():set(0,0,1))) * ((device().cam_dir.x > 0) and -1 or 1)
+
+	local text = "GhenTuong:"
+	text = text .. " pos:" .. (pos and (tostring(pos.x)..","..tostring(pos.y)..","..tostring(pos.z)) or "nil")
+	text = text .. " vid:" .. (vid or "nil")
+	text = text .. " pos:" .. (pip and (round_number(pip.x)..","..tostring(pip.y)..","..round_number(pip.z)) or "nil")
+	text = text .. " dir:" .. (dir or "nil")
+	printf("%s",text)
+end
+
+local vertex_id = {}
+
+function cmd.ghenvid()
+	local p = vector():set(db.actor:position())
+	for x=-5,5,0.2 do
+		for z=-5,5,0.2 do
+			local tmp_pos = vector():set(VEC_ZERO)
+			tmp_pos.x = p.x + x
+			tmp_pos.y = p.y + 0.5
+			tmp_pos.z = p.z + z
+			
+			local vid = level.vertex_id(tmp_pos)
+			if (vertex_id[vid] == nil) and (vid < 4294967295) then
+				vertex_id[vid] = true
+			end
+		end
+	end
+	
+	local gid = db.actor:game_vertex_id()
+	for vid,id in pairs(vertex_id) do
+		if (vid and (id == true)) then
+			local pos = level.vertex_position(vid)
+			local obj = alife():create("as_ghenvid",pos,vid,gid)
+			vertex_id[vid] = obj.id
+		end
+	end
+end
+
+function cmd.ghendel()
+	for vid,id in pairs(vertex_id) do
+		local obj = tonumber(id) and alife():object(tonumber(id))
+		if (obj and string.find(obj:name(),"as_ghenvid")) then
+			alife_release(obj)
+		end
+		vertex_id[vid] = nil
+	end
+end
+
+
+function cmd.ghenscv()
+	local lvl = level.name()
+	for sec,scv in pairs(se_smart_cover.registered_smartcovers) do
+		if (scv and scv.m_game_vertex_id) then
+			if (alife():level_name(game_graph():vertex(scv.m_game_vertex_id):level_id()) == lvl) then
+				local vid = scv and level.vertex_id(scv.position)
+				local pos = vid and level.vertex_position(vid)
+				local gid = scv.m_game_vertex_id
+				if (pos and vid) then
+					alife():create("as_ghenvid",pos,vid,gid)
+					printf("GhenTuong: created %s",sec)
+				else
+					printf("GhenTuong: no %s",sec)
+				end
+			end
+		end
+	end
+end
+
+
+function cmd.campfire()
+	for _,k in pairs(db.campfire_table_by_smart_names) do
+		for i,v in pairs (k) do
+			printf("GhenTuong: campfire [%s] %s",v.object:name(),v.object:position())
+		end
+	end
+end
+--]]
